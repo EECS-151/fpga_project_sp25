@@ -20,6 +20,12 @@ ISA_TESTS_FST           := $(addprefix sim/isa/,$(subst .hex,.fst,$(ISA_TESTS_FI
 C_TESTS                 := $(subst /cygdrive/c/,C:/,$(shell find $(ABS_TOP)/../software/c_tests -type f -name "*.c"))
 C_TESTS_FILES           := $(notdir $(C_TESTS))
 C_TESTS_FST             := $(addprefix sim/c_tests/,$(subst .c,.fst,$(C_TESTS_FILES)))
+SMALL_TESTS             := $(subst /cygdrive/c/,C:/,$(shell find $(ABS_TOP)/../software/small -type f -name "*.c"))
+SMALL_TESTS_FILES       := $(notdir $(SMALL_TESTS))
+SMALL_TESTS_FST         := $(addprefix sim/small/,$(subst .c,.fst,$(SMALL_TESTS_FILES)))
+MYPORT                  ?= MYPORT_NOT_SET
+
+# all: build/impl/$(TOP).bit
 
 sim/%.tb: sim/%.v $(RTL) $(SIM_MODELS)
 	cd sim && $(VCS) $(VCS_OPTS) -o $*.tb $(RTL) $(SIM_MODELS) $*.v -top $* -top glbl
@@ -52,6 +58,16 @@ sim/c_tests/%.fst: sim/c_tests/c_tests_tb.tbi $(ABS_TOP)/../software/c_tests/%
 	cd sim/c_tests && $(VVP) c_tests_tb.tbi -fst +hex_file=$(word 2,$^)/$*.hex +test_name=$(basename $(notdir $(word 2,$^))) |& tee $(basename $(notdir $(word 2,$^))).log
 
 c-tests: $(C_TESTS_FST)
+
+# Small Tests
+sim/small/small_tb.tbi: sim/small_tb.v $(RTL) $(SIM_MODELS)
+	mkdir -p sim/small
+	cd sim/small && $(IVERILOG) $(IVERILOG_OPTS) -o small_tb.tbi ../small_tb.v $(RTL) $(SIM_MODELS)
+
+sim/small/%.fst: sim/small/small_tb.tbi $(ABS_TOP)/../software/small/%
+	@cd sim/small && $(VVP) small_tb.tbi -fst +hex_file=$(word 2,$^)/$*.hex +test_name=$(basename $(notdir $(word 2,$^))) |& tee $(basename $(notdir $(word 2,$^))).log
+
+small-tests: $(SMALL_TESTS_FST)
 
 build/target.tcl: $(RTL) $(CONSTRAINTS)
 	mkdir -p build
@@ -93,6 +109,12 @@ program: build/impl/$(TOP).bit $(SCRIPTS)/program.tcl
 program-force:
 	cd build/impl && $(VIVADO) $(VIVADO_OPTS) -source $(SCRIPTS)/program.tcl
 
+remote: build/impl/$(TOP).bit $(SCRIPTS)/program.tcl
+	cd build/impl && $(VIVADO) $(VIVADO_OPTS) -source $(SCRIPTS)/remote.tcl
+
+remote-force:
+	cd build/impl && $(VIVADO) $(VIVADO_OPTS) -source $(SCRIPTS)/remote.tcl
+
 vivado: build
 	cd build && nohup $(VIVADO) </dev/null >/dev/null 2>&1 &
 
@@ -113,10 +135,10 @@ clean-sim:
 	sim/*.tb sim/*.daidir sim/csrc \
 	sim/ucli.key sim/*.vpd sim/*.vcd \
 	sim/*.tbi sim/*.fst sim/*.jou sim/*.log sim/*.out \
-	sim/isa sim/c_tests
+	sim/isa sim/c_tests sim/small
 
 clean-build:
 	rm -rf ./build
 
-.PHONY: setup synth impl program program-force vivado all clean-build clean-sim %.tb
+.PHONY: setup synth impl program program-force remote remote-force vivado all clean-build clean-sim %.tb
 .PRECIOUS: sim/%.tb sim/%.tbi sim/%.fst sim/%.vpd
